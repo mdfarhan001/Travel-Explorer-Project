@@ -1,22 +1,37 @@
 #!/bin/bash
+set -e
 
-# Set the Instance ID and path to the .env file
-INSTANCE_ID="i-030da7d31a1dbbffc"
+INSTANCE_ID="i-01e8eae06dad60463"
 
-# Retrieve the public IP address of the specified EC2 instance
-ipv4_address=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+FILE_TO_FIND="../frontend/.env.docker"
 
-# Path to the .env file
-file_to_find="../frontend/.env.docker"
+IPV4_ADDRESS=$(aws ec2 describe-instances \
+    --instance-ids "$INSTANCE_ID" \
+    --query 'Reservations[0].Instances[0].PublicIpAddress' \
+    --output text)
 
-# Check the current VITE_API_PATH in the .env file
-current_url=$(cat $file_to_find)
+if [ -z "$IPV4_ADDRESS" ] || [ "$IPV4_ADDRESS" = "None" ]; then
+    echo "ERROR: Could not retrieve EC2 public IP"
+    exit 1
+fi
 
-# Update the .env file if the IP address has changed
-if [[ "$current_url" != "VITE_API_PATH=\"http://${ipv4_address}:31100\"" ]]; then
-    if [ -f $file_to_find ]; then
-        sed -i -e "s|VITE_API_PATH.*|VITE_API_PATH=\"http://${ipv4_address}:31100\"|g" $file_to_find
+echo "EC2 Public IP: $IPV4_ADDRESS"
+
+if [ ! -f "$FILE_TO_FIND" ]; then
+    echo "Creating frontend/.env.docker"
+
+    cat > "$FILE_TO_FIND" <<EOF
+VITE_API_PATH="http://${IPV4_ADDRESS}:31100"
+EOF
+else
+    echo "Updating frontend/.env.docker"
+
+    if grep -q "^VITE_API_PATH=" "$FILE_TO_FIND"; then
+        sed -i "s|^VITE_API_PATH=.*|VITE_API_PATH=\"http://${IPV4_ADDRESS}:31100\"|" "$FILE_TO_FIND"
     else
-        echo "ERROR: File not found."
+        echo "VITE_API_PATH=\"http://${IPV4_ADDRESS}:31100\"" >> "$FILE_TO_FIND"
     fi
 fi
+
+echo "===== frontend/.env.docker ====="
+cat "$FILE_TO_FIND"
